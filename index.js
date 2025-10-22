@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { fileURLToPath } from "url";
-import pkg from "whatsapp-web.js";   // ✅ Importación CommonJS -> ESM
+import pkg from "whatsapp-web.js"; // ✅ Importación CommonJS -> ESM
 const { Client, LocalAuth } = pkg;
 
 // ============================================================
@@ -19,8 +19,7 @@ const port = process.env.PORT || 3001;
 
 // ✅ Usamos carpeta temporal del sistema (Render tiene permisos aquí)
 const TMP_DIR = os.tmpdir();
-const PROFILE_DIR =
-  process.env.PUPPETEER_PROFILE_DIR || path.join(TMP_DIR, "chrome-profile");
+const PROFILE_DIR = path.join(TMP_DIR, "chrome-profile");
 
 // Creamos carpeta si no existe
 try {
@@ -70,7 +69,10 @@ console.log("🧠 Usando ejecutable Chromium en:", executablePath || "auto-manag
 // 🤖 CLIENTE WHATSAPP
 // ============================================================
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: PROFILE_DIR }),
+  // 🔥 CAMBIO CLAVE: forzamos LocalAuth a usar /tmp
+  authStrategy: new LocalAuth({
+    dataPath: path.join(TMP_DIR, "whatsapp-session"), // ✅ tiene permisos
+  }),
   puppeteer: {
     executablePath,
     headless: true,
