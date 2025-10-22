@@ -4,8 +4,7 @@ import qrcode from "qrcode";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import puppeteer from "puppeteer";
-import pkg from "whatsapp-web.js";   // ✅ Importación CommonJS -> ESM
+import pkg from "whatsapp-web.js";   // ✅ Importación compatible CommonJS -> ESM
 const { Client, LocalAuth } = pkg;
 
 // ============================================================
@@ -17,36 +16,42 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3001;
 
-const PROFILE_DIR =
-  process.env.PUPPETEER_PROFILE_DIR || path.join(__dirname, "chrome-profile");
-
+// Directorio del perfil de Chrome
+const PROFILE_DIR = process.env.PUPPETEER_PROFILE_DIR || path.join(__dirname, "chrome-profile");
 if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
 
 // ============================================================
-// 🧠 CONFIGURACIÓN DE CHROMIUM (para Render)
+// 🔍 FUNCIÓN PARA ENCONTRAR CHROME/CHROMIUM
 // ============================================================
-async function getExecutablePath() {
-  try {
-    const browserFetcher = puppeteer.createBrowserFetcher();
-    const localRevisions = await browserFetcher.localRevisions();
-    if (localRevisions.length > 0) {
-      const revisionInfo = browserFetcher.revisionInfo(localRevisions[0]);
-      return revisionInfo.executablePath;
-    }
-  } catch (e) {
-    console.warn("⚠️ No se encontró Chromium local:", e.message);
+function resolveChromePath() {
+  const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (envPath && fs.existsSync(envPath)) return envPath;
+
+  const candidates = [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
   }
-  return puppeteer.executablePath(); // fallback
+
+  console.warn("⚠️ Ninguna instalación de Chromium encontrada, Render instalará una versión interna.");
+  return undefined;
 }
 
+// ============================================================
+// 🧠 VARIABLES DE ESTADO
+// ============================================================
 let lastQr = null;
 let isReady = false;
 let isAuthenticated = false;
 let lastAuthFailure = null;
 let lastDisconnect = null;
 
-const executablePath = await getExecutablePath();
-console.log("🧠 Usando Chromium en:", executablePath);
+const executablePath = resolveChromePath();
+console.log("🧠 Usando ejecutable Chromium en:", executablePath || "auto-managed");
 
 // ============================================================
 // 🤖 CLIENTE WHATSAPP
@@ -54,24 +59,26 @@ console.log("🧠 Usando Chromium en:", executablePath);
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: PROFILE_DIR }),
   puppeteer: {
-    executablePath,
+    executablePath: executablePath,
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-extensions",
       "--disable-gpu",
       "--no-first-run",
       "--no-zygote",
       "--single-process",
+      "--disable-extensions",
       "--disable-background-networking",
+      "--disable-sync",
+      "--disable-features=TranslateUI",
     ],
   },
 });
 
 client.on("qr", async (qr) => {
-  console.log("📲 Nuevo QR generado. Escanéalo desde WhatsApp.");
+  console.log("📲 Nuevo QR generado. Escanéalo con tu WhatsApp.");
   try {
     lastQr = await qrcode.toDataURL(qr);
     isAuthenticated = false;
@@ -83,14 +90,14 @@ client.on("qr", async (qr) => {
 
 client.on("ready", () => {
   isReady = true;
-  console.log("✅ WhatsApp conectado correctamente.");
+  console.log("✅ WhatsApp conectado y listo.");
 });
 
 client.on("authenticated", () => {
   isAuthenticated = true;
   lastAuthFailure = null;
   lastQr = null;
-  console.log("🔑 Sesión autenticada con éxito.");
+  console.log("🔑 Sesión autenticada correctamente.");
 });
 
 client.on("auth_failure", (msg) => {
@@ -111,6 +118,10 @@ client.on("disconnected", (reason) => {
 // ============================================================
 app.use(express.static(path.join(__dirname, "public")));
 
+app.get("/", (_, res) => {
+  res.send("📡 Microservicio WhatsApp activo y funcionando correctamente 🚀");
+});
+
 app.get("/health", (_, res) =>
   res.json({
     ok: true,
@@ -120,12 +131,12 @@ app.get("/health", (_, res) =>
   })
 );
 
-app.get("/qr", (req, res) => {
+app.get("/qr", (_, res) => {
   if (!lastQr) return res.json({ qr: "" });
   res.json({ qr: lastQr });
 });
 
-app.get("/chats", async (req, res) => {
+app.get("/chats", async (_, res) => {
   try {
     const chats = await client.getChats();
     res.json(
@@ -139,8 +150,6 @@ app.get("/chats", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
-app.get("/", (_, res) => res.send("📡 Microservicio WhatsApp activo y listo 🚀"));
 
 // ============================================================
 // 🚀 INICIO DEL SERVICIO
@@ -173,3 +182,5 @@ async function shutdown() {
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+console.log("✅ Deploy listo, Render lo levantará automáticamente.");
