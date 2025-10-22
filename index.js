@@ -3,8 +3,9 @@ import express from "express";
 import qrcode from "qrcode";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { fileURLToPath } from "url";
-import pkg from "whatsapp-web.js";   // ✅ Importación compatible CommonJS -> ESM
+import pkg from "whatsapp-web.js";   // ✅ Importación CommonJS -> ESM
 const { Client, LocalAuth } = pkg;
 
 // ============================================================
@@ -16,9 +17,20 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Directorio del perfil de Chrome
-const PROFILE_DIR = process.env.PUPPETEER_PROFILE_DIR || path.join(__dirname, "chrome-profile");
-if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
+// ✅ Usamos carpeta temporal del sistema (Render tiene permisos aquí)
+const TMP_DIR = os.tmpdir();
+const PROFILE_DIR =
+  process.env.PUPPETEER_PROFILE_DIR || path.join(TMP_DIR, "chrome-profile");
+
+// Creamos carpeta si no existe
+try {
+  if (!fs.existsSync(PROFILE_DIR)) {
+    fs.mkdirSync(PROFILE_DIR, { recursive: true });
+  }
+  console.log("📁 Carpeta de perfil creada en:", PROFILE_DIR);
+} catch (e) {
+  console.error("❌ No se pudo crear carpeta de perfil:", e.message);
+}
 
 // ============================================================
 // 🔍 FUNCIÓN PARA ENCONTRAR CHROME/CHROMIUM
@@ -33,11 +45,12 @@ function resolveChromePath() {
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
   ];
+
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
   }
 
-  console.warn("⚠️ Ninguna instalación de Chromium encontrada, Render instalará una versión interna.");
+  console.warn("⚠️ No se encontró Chromium, Puppeteer usará el integrado.");
   return undefined;
 }
 
@@ -59,7 +72,7 @@ console.log("🧠 Usando ejecutable Chromium en:", executablePath || "auto-manag
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: PROFILE_DIR }),
   puppeteer: {
-    executablePath: executablePath,
+    executablePath,
     headless: true,
     args: [
       "--no-sandbox",
@@ -78,7 +91,7 @@ const client = new Client({
 });
 
 client.on("qr", async (qr) => {
-  console.log("📲 Nuevo QR generado. Escanéalo con tu WhatsApp.");
+  console.log("📲 Nuevo QR generado. Escanéalo desde WhatsApp.");
   try {
     lastQr = await qrcode.toDataURL(qr);
     isAuthenticated = false;
