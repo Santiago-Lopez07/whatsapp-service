@@ -4,11 +4,12 @@ import qrcode from "qrcode";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { Client, LocalAuth } from "whatsapp-web.js";
-import puppeteer from "puppeteer"; // ✅ Puppeteer completo, con Chromium incluido
+import puppeteer from "puppeteer";
+import pkg from "whatsapp-web.js";   // ✅ Importación CommonJS -> ESM
+const { Client, LocalAuth } = pkg;
 
 // ============================================================
-// 🧩 CONFIGURACIÓN BASE
+// ⚙️ CONFIGURACIÓN BASE
 // ============================================================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,11 +20,10 @@ const port = process.env.PORT || 3001;
 const PROFILE_DIR =
   process.env.PUPPETEER_PROFILE_DIR || path.join(__dirname, "chrome-profile");
 
-// Crear carpeta del perfil si no existe
 if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
 
 // ============================================================
-// ⚙️ CONFIGURACIÓN DE PUPPETEER
+// 🧠 CONFIGURACIÓN DE CHROMIUM (para Render)
 // ============================================================
 async function getExecutablePath() {
   try {
@@ -39,9 +39,6 @@ async function getExecutablePath() {
   return puppeteer.executablePath(); // fallback
 }
 
-// ============================================================
-// 🤖 CLIENTE WHATSAPP
-// ============================================================
 let lastQr = null;
 let isReady = false;
 let isAuthenticated = false;
@@ -51,6 +48,9 @@ let lastDisconnect = null;
 const executablePath = await getExecutablePath();
 console.log("🧠 Usando Chromium en:", executablePath);
 
+// ============================================================
+// 🤖 CLIENTE WHATSAPP
+// ============================================================
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: PROFILE_DIR }),
   puppeteer: {
@@ -70,9 +70,6 @@ const client = new Client({
   },
 });
 
-// ============================================================
-// 🧠 EVENTOS DE ESTADO
-// ============================================================
 client.on("qr", async (qr) => {
   console.log("📲 Nuevo QR generado. Escanéalo desde WhatsApp.");
   try {
